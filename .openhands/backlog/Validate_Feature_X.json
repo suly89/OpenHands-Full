@@ -1,0 +1,8 @@
+{
+  "title": "Validate Feature X",
+  "description": "Perform final validation of feature X",
+  "phase": "validation",
+  "status": "not_started",
+  "acceptance_criteria": "",
+  "created_by": "RDTeamAgent"
+}

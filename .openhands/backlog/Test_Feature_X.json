@@ -1,0 +1,8 @@
+{
+  "title": "Test Feature X",
+  "description": "Write and execute tests for feature X",
+  "phase": "testing",
+  "status": "not_started",
+  "acceptance_criteria": "",
+  "created_by": "RDTeamAgent"
+}

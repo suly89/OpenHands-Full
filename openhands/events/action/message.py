@@ -4,6 +4,7 @@ from typing import Any
 import openhands
 from openhands.core.schema import ActionType
 from openhands.events.action.action import Action, ActionSecurityRisk
+from openhands.events.event import EventSource
 
 
 @dataclass
@@ -14,6 +15,7 @@ class MessageAction(Action):
     wait_for_response: bool = False
     action: str = ActionType.MESSAGE
     security_risk: ActionSecurityRisk | None = None
+    source: EventSource | None = EventSource.USER
 
     @property
     def message(self) -> str:
@@ -51,6 +53,7 @@ class SystemMessageAction(Action):
     tools: list[Any] | None = None
     openhands_version: str | None = openhands.__version__
     agent_class: str | None = None
+    source: EventSource | None = EventSource.ENVIRONMENT
     action: ActionType = ActionType.SYSTEM
 
     @property

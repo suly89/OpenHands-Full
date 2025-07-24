@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
 OH_DEFAULT_AGENT = 'CodeActAgent'
-OH_MAX_ITERATIONS = 500
+OH_MAX_ITERATIONS = 1000
 DEFAULT_WORKSPACE_MOUNT_PATH_IN_SANDBOX = '/workspace'
 
 

@@ -1,0 +1,8 @@
+{
+  "title": "Gather Requirements",
+  "description": "Collect user requirements for the project",
+  "phase": "requirements_gathering",
+  "status": "not_started",
+  "acceptance_criteria": "User requirements have been collected and documented",
+  "created_by": "RDTeamAgent"
+}

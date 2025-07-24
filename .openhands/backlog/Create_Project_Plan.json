@@ -1,0 +1,8 @@
+{
+  "title": "Create Project Plan",
+  "description": "Develop a project plan based on requirements",
+  "phase": "planning",
+  "status": "not_started",
+  "acceptance_criteria": "Project plan is created with milestones and timelines",
+  "created_by": "RDTeamAgent"
+}
