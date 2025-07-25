@@ -1,11 +1,12 @@
-
 #!/usr/bin/env python3
 """
 Test script for RDTeamAgent CodeActAgent delegation
 """
 
 import os
+
 from openhands.agenthub.rd_team_agent.tools.backlog import BacklogTool
+
 
 def test_codeact_delegation():
     """Test that RDTeamAgent properly delegates tasks to CodeActAgent"""
@@ -44,6 +45,7 @@ def test_codeact_delegation():
     print(f'Action content: {action}')
 
     from openhands.events.action.agent import AgentDelegateAction
+
     assert isinstance(action, AgentDelegateAction)
     assert action.agent == 'codeact_agent'
     assert 'Implement Feature X' in str(action.inputs.get('title', ''))
@@ -69,13 +71,13 @@ def test_codeact_delegation():
     # Test 3: Delegate method directly
     print('\n3. Testing delegate_to_codeact_agent method...')
     action = agent.delegate_to_codeact_agent(
-        'Test Task',
-        'This is a test task for delegation'
+        'Test Task', 'This is a test task for delegation'
     )
     assert isinstance(action, AgentDelegateAction)
     assert action.agent == 'codeact_agent'
     assert action.inputs['title'] == 'Test Task'
     print('✓ delegate_to_codeact_agent method works correctly')
+
 
 if __name__ == '__main__':
     test_codeact_delegation()

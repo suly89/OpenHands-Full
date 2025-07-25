@@ -170,9 +170,9 @@ def test_advance_to_planning():
 
     # Now advance to planning
     result = agent._advance_to_planning_phase()
-    assert (
-        'start planning' in result.content.lower()
-        and ('milestones' in result.content.lower() or 'deliverables' in result.content.lower())
+    assert 'start planning' in result.content.lower() and (
+        'milestones' in result.content.lower()
+        or 'deliverables' in result.content.lower()
     )
     print(f'Planning result: {result}')
     print('✓ Planning phase initiated')
