@@ -140,10 +140,11 @@ class RDTeamAgent(Agent):
         params['extra_body'] = {'metadata': state.to_llm_metadata(agent_name=self.name)}
         response = self.llm.completion(**params)
         logger.debug(f'Response from LLM: {response}')
-        action = self.response_to_actions(response)
-        logger.debug(f'Action after response_to_actions: {action}')
-
-        return action
+        actions = self.response_to_actions(response)
+        logger.debug(f'Actions after response_to_actions: {actions}')
+        for action in actions:
+            self.pending_actions.append(action)
+        return self.pending_actions.popleft()
 
     def _get_current_phase(self, state: State) -> str:
         """Determines the current development phase based on state history."""
@@ -188,13 +189,13 @@ class RDTeamAgent(Agent):
             return 'planning'
 
         # Return first phase if no tasks found
-        return default_phases[0]
+        return 'requirements_gathering'
 
     def _get_initial_user_message(self, history: list[Event]) -> MessageAction:
         """Finds the initial user message action from the full history."""
         initial_user_message: MessageAction | None = None
         for event in history:
-            if isinstance(event, MessageAction):
+            if isinstance(event, MessageAction) and event.source == 'user':
                 initial_user_message = event
                 break
 
@@ -214,128 +215,83 @@ class RDTeamAgent(Agent):
         """
         logger.info('Handling requirements gathering phase')
 
-        # Check if we've already gathered requirements
-        backlog_dir = '/workspace/OpenHands-Full/.openhands/backlog'
-        os.makedirs(backlog_dir, exist_ok=True)
-
-        # Look for existing requirements tasks
-        requirements_tasks = []
+        # Buscar si ya existe una tarea de requirements gathering
         try:
             all_tasks = BacklogTool.get_backlog_tasks()
             requirements_tasks = [
-                task
-                for task in all_tasks
+                task for task in all_tasks
                 if (task.get('phase', '').lower() == 'requirements_gathering')
             ]
         except Exception as e:
             logger.warning(f'Error getting backlog tasks: {e}')
+            requirements_tasks = []
 
-        # If we already have requirements, move to planning
-        if requirements_tasks:
-            logger.info('Requirements already gathered, moving to next phase')
-            return self._advance_to_planning_phase()
-
-        # Start requirements gathering conversation
+        # Buscar mensajes del usuario relevantes
         user_messages = [
-            e
-            for e in state.history
+            e for e in state.history
             if isinstance(e, MessageAction) and e.source == 'user'
         ]
+        last_user_message = user_messages[-1].content.lower() if user_messages else ""
 
-        # Always create a task for requirements gathering
-        try:
-            self.create_backlog_task(
-                title='Gather Requirements',
-                description='Collect user requirements for the project',
-                phase='requirements_gathering',
-                acceptance_criteria='User requirements have been collected and documented',
-            )
-        except Exception as e:
-            logger.error(f'Failed to create requirements task: {e}')
-
-        if not user_messages or 'requirements' not in user_messages[-1].content.lower():
-            # Ask about requirements if we haven't started yet
-            self.pending_actions.extend(
-                [
-                    MessageAction(
-                        content='As the Product Owner, I need to understand your requirements before we start. Could you please describe what you need this project to accomplish? What are the key features and goals?',
-                        source=EventSource.AGENT,
-                    )
-                ]
-            )
+        # Si el usuario indica que terminó ("/done" o similar)
+        if any(x in last_user_message for x in ["no more requirements", "/done", "listo", "terminé"]):
+            # Actualiza la tarea de requirements con los requisitos recogidos
+            requirements_text = "\n".join([m.content for m in user_messages])
+            if requirements_tasks:
+                BacklogTool.update_task(
+                    requirements_tasks[0]['id'],
+                    description=requirements_text,
+                    status='completed'
+                )
+            else:
+                self.create_backlog_task(
+                    title='Gather Requirements',
+                    description=requirements_text,
+                    phase='requirements_gathering',
+                    status='completed',
+                    acceptance_criteria='User requirements have been collected and documented',
+                )
+            self.pending_actions.extend([
+                MessageAction(
+                    content="Thank you! All requirements have been documented. Shall we move to planning? (Reply 'yes' to continue)",
+                    source=EventSource.AGENT,
+                )
+            ])
             return self.pending_actions.popleft()
 
-        # If user has provided some requirements, acknowledge and create task
-        user_messages[-1].content
+        # Si ya existe la tarea y está completa, pasar a planning
+        if requirements_tasks and requirements_tasks[0].get('status') == 'completed':
+            return self._advance_to_planning_phase()
 
-        # Create a backlog task for the requirements
-        try:
-            self.create_backlog_task(
-                title='Gather Requirements',
-                description='Collect user requirements for the project',
-                phase='requirements_gathering',
-                acceptance_criteria='User requirements have been collected and documented',
-            )
+        # Si no hay requisitos aún, preguntar
+        if not user_messages or "requirements" not in last_user_message:
+            self.pending_actions.extend([
+                MessageAction(
+                    content="As the Product Owner, please describe all the requirements for your project. When finished, reply '/done'.",
+                    source=EventSource.AGENT,
+                )
+            ])
+            return self.pending_actions.popleft()
 
-            # Set pending actions for the next steps
-            self.pending_actions.extend(
-                [
-                    MessageAction(
-                        content='Thank you! I have created a task to gather your requirements.',
-                        source=EventSource.AGENT,
-                    ),
-                    AgentFinishAction(
-                        final_thought='Requirements gathering initiated',
-                        task_completed=AgentFinishTaskCompleted.TRUE,
-                    ),
-                ]
+        # Si el usuario está proporcionando requisitos, seguir preguntando
+        self.pending_actions.extend([
+            MessageAction(
+                content="Noted. Do you have more requirements? If not, reply '/done'.",
+                source=EventSource.AGENT,
             )
-        except Exception as e:
-            logger.error(f'Error creating requirements task: {e}')
-            self.pending_actions.extend(
-                [
-                    MessageAction(
-                        content=f'Thank you for providing those requirements. However, I encountered an error documenting them: {str(e)}',
-                        source=EventSource.AGENT,
-                    ),
-                    AgentFinishAction(
-                        final_thought='Requirements gathered but not documented due to error',
-                        task_completed=AgentFinishTaskCompleted.FALSE,
-                    ),
-                ]
-            )
-
-        # Return the first pending action
+        ])
         return self.pending_actions.popleft()
 
     def _advance_to_planning_phase(self) -> 'Action':
         """Advances from requirements gathering to planning phase."""
         logger.info('Advancing to planning phase')
-
-        # Create a requirements task
-        self.create_backlog_task(
-            title='Gather Requirements',
-            description='Collect user requirements for the project',
-            phase='requirements_gathering',
-            acceptance_criteria='User requirements have been collected and documented',
-        )
-
-        # Create a planning task
-        self.create_backlog_task(
-            title='Create Project Plan',
-            description='Develop a project plan based on requirements',
-            phase='planning',
-            acceptance_criteria='Project plan is created with milestones and timelines',
-        )
-
-        self.pending_actions.extend(
-            [
-                MessageAction(
-                    content="Requirements have been documented. Now moving to the planning phase where we'll define the project scope and roadmap.",
-                    source=EventSource.AGENT,
-                )
-            ]
-        )
+        # Aquí puedes interactuar para definir milestones, entregables, etc.
+        self.pending_actions.extend([
+            MessageAction(
+                content="Let's start planning! Please describe the main milestones and deliverables for your project.",
+                source=EventSource.AGENT,
+            )
+        ])
         return self.pending_actions.popleft()
 
     def _get_messages(
@@ -380,30 +336,42 @@ class RDTeamAgent(Agent):
             acceptance_criteria=acceptance_criteria,
         )
 
-    def response_to_actions(self, response: 'ModelResponse') -> 'Action':
-        """Converts LLM response to actions."""
-        # Simple implementation - in a real scenario this would be more complex
+    def response_to_actions(self, response: 'ModelResponse') -> list['Action']:
+        """
+        Converts LLM response to actions.
+        Supports multi-action and function-calling style responses.
+        """
+        # If using function-calling, parse accordingly
+        actions = []
+        # If response.choices exists, use the first choice's message
+        if hasattr(response, 'choices') and response.choices:
+            msg = response.choices[0].message
+            content = msg.content
+            role = getattr(msg, 'role', 'assistant')
+        else:
+            content = response.content if hasattr(response, 'content') else str(response)
+            role = 'assistant'
 
-        content = response.content if hasattr(response, 'content') else str(response)
+        # Map role to source
+        if role == 'assistant':
+            source = EventSource.AGENT
+        elif role == 'user':
+            source = EventSource.USER
+        else:
+            source = EventSource.AGENT
 
         # Check for finish signal
         if any(
             keyword in content.lower()
             for keyword in ['complete', 'finished', 'done', '/exit']
         ):
-            self.pending_actions.extend(
-                [
-                    AgentFinishAction(
-                        final_thought='Task completed',
-                        task_completed=AgentFinishTaskCompleted.TRUE,
-                    )
-                ]
+            actions.append(
+                AgentFinishAction(
+                    final_thought='Task completed',
+                    task_completed=AgentFinishTaskCompleted.TRUE,
+                )
             )
-            return self.pending_actions.popleft()
+            return actions
 
-        # Create a message action with the LLM response
-
-        self.pending_actions.extend(
-            [MessageAction(content=content, source=EventSource.AGENT)]
-        )
-        return self.pending_actions.popleft()
+        actions.append(MessageAction(content=content, source=source))
+        return actions
