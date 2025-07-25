@@ -12,7 +12,7 @@ from openhands.controller.state.state import State
 from openhands.core.config import AgentConfig
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.message import Message, TextContent
-from openhands.events.action.agent import AgentFinishAction, AgentFinishTaskCompleted
+from openhands.events.action.agent import AgentDelegateAction, AgentFinishAction, AgentFinishTaskCompleted
 from openhands.events.action.message import MessageAction
 from openhands.events.event import Event, EventSource
 from openhands.llm.llm import LLM
@@ -108,9 +108,13 @@ class RDTeamAgent(Agent):
         current_phase = self._get_current_phase(state)
         logger.info(f'Current phase: {current_phase}')
 
-        # Handle requirements gathering phase specially
+        # Handle different phases specially
         if current_phase == 'requirements_gathering':
             return self._handle_requirements_gathering(state)
+        elif current_phase == 'development':
+            return self._handle_development_phase(state)
+        elif current_phase == 'testing':
+            return self._handle_testing_phase(state)
 
         # Process events and get messages for LLM
         condensed_history: list[Event] = []
@@ -294,6 +298,78 @@ class RDTeamAgent(Agent):
         ])
         return self.pending_actions.popleft()
 
+    def _handle_development_phase(self, state: State) -> 'Action':
+        """Handles the development phase where tasks are delegated to CodeActAgent."""
+        logger.info('Handling development phase')
+
+        # Check if there are any development tasks in backlog
+        try:
+            development_tasks = BacklogTool.get_tasks_by_phase('development')
+            if not development_tasks:
+                self.pending_actions.extend([
+                    MessageAction(
+                        content="No development tasks found. Let's create some based on the requirements.",
+                        source=EventSource.AGENT,
+                    )
+                ])
+                return self.pending_actions.popleft()
+        except Exception as e:
+            logger.warning(f'Error getting development tasks: {e}')
+            development_tasks = []
+
+        # If there are tasks, delegate them to CodeActAgent
+        if development_tasks:
+            task = development_tasks[0]  # Take the first one for now
+            return self.delegate_to_codeact_agent(
+                task_title=task['title'],
+                task_description=task['description']
+            )
+
+        # If no tasks and no errors, we're done with development
+        self.pending_actions.extend([
+            MessageAction(
+                content="Development phase completed. Shall we move to testing? (Reply 'yes' to continue)",
+                source=EventSource.AGENT,
+            )
+        ])
+        return self.pending_actions.popleft()
+
+    def _handle_testing_phase(self, state: State) -> 'Action':
+        """Handles the testing phase where tasks are delegated to CodeActAgent."""
+        logger.info('Handling testing phase')
+
+        # Check if there are any testing tasks in backlog
+        try:
+            testing_tasks = BacklogTool.get_tasks_by_phase('testing')
+            if not testing_tasks:
+                self.pending_actions.extend([
+                    MessageAction(
+                        content="No testing tasks found. Let's create some based on the implemented features.",
+                        source=EventSource.AGENT,
+                    )
+                ])
+                return self.pending_actions.popleft()
+        except Exception as e:
+            logger.warning(f'Error getting testing tasks: {e}')
+            testing_tasks = []
+
+        # If there are tasks, delegate them to CodeActAgent
+        if testing_tasks:
+            task = testing_tasks[0]  # Take the first one for now
+            return self.delegate_to_codeact_agent(
+                task_title=task['title'],
+                task_description=task['description']
+            )
+
+        # If no tasks and no errors, we're done with testing
+        self.pending_actions.extend([
+            MessageAction(
+                content="Testing phase completed. Shall we move to validation? (Reply 'yes' to continue)",
+                source=EventSource.AGENT,
+            )
+        ])
+        return self.pending_actions.popleft()
+
     def _get_messages(
         self, events: list[Event], initial_user_message: MessageAction
     ) -> list[Message]:
@@ -334,6 +410,35 @@ class RDTeamAgent(Agent):
             phase=phase,
             status=status,
             acceptance_criteria=acceptance_criteria,
+        )
+
+    def delegate_to_codeact_agent(self, task_title: str, task_description: str) -> 'Action':
+        """Delegates a development or testing task to the CodeActAgent.
+
+        Args:
+            task_title: Title of the task to delegate
+            task_description: Detailed description of what needs to be done
+
+        Returns:
+            AgentDelegateAction: Action to delegate the task to CodeActAgent
+        """
+        logger.info(f'Delegating task "{task_title}" to CodeActAgent')
+
+        # Prepare inputs for CodeActAgent
+        inputs = {
+            'task': task_description,
+            'title': task_title,
+            'instructions': (
+                f"Complete the task '{task_title}' as described. "
+                f"This is part of a larger project managed by RDTeamAgent. "
+                f"Follow best practices for code quality and testing."
+            )
+        }
+
+        return AgentDelegateAction(
+            agent='codeact_agent',
+            inputs=inputs,
+            thought=f'Delegating implementation/testing task "{task_title}" to CodeActAgent'
         )
 
     def response_to_actions(self, response: 'ModelResponse') -> list['Action']:
