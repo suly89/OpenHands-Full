@@ -27,6 +27,7 @@ const SAAS_NAV_ITEMS = [
 
 const OSS_NAV_ITEMS = [
   { to: "/settings", text: "SETTINGS$NAV_LLM" },
+  { to: "/settings/system", text: "SETTINGS$NAV_SYSTEM" },
   { to: "/settings/mcp", text: "SETTINGS$NAV_MCP" },
   { to: "/settings/integrations", text: "SETTINGS$NAV_INTEGRATIONS" },
   { to: "/settings/app", text: "SETTINGS$NAV_APPLICATION" },

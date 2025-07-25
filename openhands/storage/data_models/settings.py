@@ -45,6 +45,13 @@ class Settings(BaseModel):
     max_budget_per_task: float | None = None
     email: str | None = None
     email_verified: bool | None = None
+    max_token: int | None = None
+    max_input_tokens: int | None = None
+    max_output_tokens: int | None = None
+    num_retries: int | None = None
+    retry_min_wait: int | None = None
+    retry_max_wait: int | None = None
+    retry_multiplier: float | None = None
 
     model_config = ConfigDict(
         validate_assignment=True,

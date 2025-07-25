@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 
@@ -69,6 +71,13 @@ async def load_settings(
             search_api_key_set=settings.search_api_key is not None
             and bool(settings.search_api_key),
             provider_tokens_set=provider_tokens_set,
+            max_token=settings.max_token,
+            max_input_tokens=settings.max_input_tokens,
+            max_output_tokens=settings.max_output_tokens,
+            num_retries=settings.num_retries,
+            retry_min_wait=settings.retry_min_wait,
+            retry_max_wait=settings.retry_max_wait,
+            retry_multiplier=settings.retry_multiplier,
         )
         settings_with_token_data.llm_api_key = None
         settings_with_token_data.search_api_key = None
@@ -166,6 +175,10 @@ async def store_settings(
 
         settings = convert_to_settings(settings)
         await settings_store.store(settings)
+
+        # Update runtime environment with new settings
+        update_runtime_environment(settings)
+
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={'message': 'Settings stored'},
@@ -176,6 +189,42 @@ async def store_settings(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={'error': 'Something went wrong storing settings'},
         )
+
+
+def update_runtime_environment(settings: Settings) -> None:
+    """Update runtime environment variables based on settings."""
+    if settings.max_token is not None:
+        os.environ['MAX_TOKEN'] = str(settings.max_token)
+
+    if settings.max_input_tokens is not None:
+        # Update LLM config in memory
+        if hasattr(config, 'llm_config'):
+            config.llm_config.max_input_tokens = settings.max_input_tokens
+
+    if settings.max_output_tokens is not None:
+        # Update LLM config in memory
+        if hasattr(config, 'llm_config'):
+            config.llm_config.max_output_tokens = settings.max_output_tokens
+
+    if settings.num_retries is not None:
+        # Update LLM config in memory
+        if hasattr(config, 'llm_config'):
+            config.llm_config.num_retries = settings.num_retries
+
+    if settings.retry_min_wait is not None:
+        # Update LLM config in memory
+        if hasattr(config, 'llm_config'):
+            config.llm_config.retry_min_wait = settings.retry_min_wait
+
+    if settings.retry_max_wait is not None:
+        # Update LLM config in memory
+        if hasattr(config, 'llm_config'):
+            config.llm_config.retry_max_wait = settings.retry_max_wait
+
+    if settings.retry_multiplier is not None:
+        # Update LLM config in memory
+        if hasattr(config, 'llm_config'):
+            config.llm_config.retry_multiplier = settings.retry_multiplier
 
 
 def convert_to_settings(settings_with_token_data: Settings) -> Settings:

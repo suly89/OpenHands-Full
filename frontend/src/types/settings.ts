@@ -49,6 +49,13 @@ export type Settings = {
   MAX_BUDGET_PER_TASK: number | null;
   EMAIL?: string;
   EMAIL_VERIFIED?: boolean;
+  MAX_TOKEN: number | null;
+  MAX_INPUT_TOKENS: number | null;
+  MAX_OUTPUT_TOKENS: number | null;
+  NUM_RETRIES: number | null;
+  RETRY_MIN_WAIT: number | null;
+  RETRY_MAX_WAIT: number | null;
+  RETRY_MULTIPLIER: number | null;
 };
 
 export type ApiSettings = {
@@ -75,6 +82,13 @@ export type ApiSettings = {
   };
   email?: string;
   email_verified?: boolean;
+  max_token: number | null;
+  max_input_tokens: number | null;
+  max_output_tokens: number | null;
+  num_retries: number | null;
+  retry_min_wait: number | null;
+  retry_max_wait: number | null;
+  retry_multiplier: number | null;
 };
 
 export type PostSettings = Settings & {

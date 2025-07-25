@@ -1,3 +1,5 @@
+
+
 import { useQuery } from "@tanstack/react-query";
 import React from "react";
 import posthog from "posthog-js";
@@ -32,6 +34,13 @@ const getSettingsQueryFn = async (): Promise<Settings> => {
     EMAIL_VERIFIED: apiSettings.email_verified,
     MCP_CONFIG: apiSettings.mcp_config,
     IS_NEW_USER: false,
+    MAX_TOKEN: apiSettings.max_token,
+    MAX_INPUT_TOKENS: apiSettings.max_input_tokens,
+    MAX_OUTPUT_TOKENS: apiSettings.max_output_tokens,
+    NUM_RETRIES: apiSettings.num_retries,
+    RETRY_MIN_WAIT: apiSettings.retry_min_wait,
+    RETRY_MAX_WAIT: apiSettings.retry_max_wait,
+    RETRY_MULTIPLIER: apiSettings.retry_multiplier,
   };
 };
 
@@ -48,38 +57,14 @@ export const useSettings = () => {
     retry: (_, error) => error.status !== 404,
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
-    gcTime: 1000 * 60 * 15, // 15 minutes
-    enabled: !isOnTosPage && !!userIsAuthenticated,
-    meta: {
-      disableToast: true,
-    },
+    enabled: !isOnTosPage && userIsAuthenticated,
   });
 
   React.useEffect(() => {
-    if (query.isFetched && query.data?.LLM_API_KEY_SET) {
-      posthog.capture("user_activated");
+    if (query.data) {
+      posthog.capture("settings_loaded");
     }
-  }, [query.data?.LLM_API_KEY_SET, query.isFetched]);
-
-  // We want to return the defaults if the settings aren't found so the user can still see the
-  // options to make their initial save. We don't set the defaults in `initialData` above because
-  // that would prepopulate the data to the cache and mess with expectations. Read more:
-  // https://tanstack.com/query/latest/docs/framework/react/guides/initial-query-data#using-initialdata-to-prepopulate-a-query
-  if (query.error?.status === 404) {
-    // Create a new object with only the properties we need, avoiding rest destructuring
-    return {
-      data: DEFAULT_SETTINGS,
-      error: query.error,
-      isError: query.isError,
-      isLoading: query.isLoading,
-      isFetching: query.isFetching,
-      isFetched: query.isFetched,
-      isSuccess: query.isSuccess,
-      status: query.status,
-      fetchStatus: query.fetchStatus,
-      refetch: query.refetch,
-    };
-  }
+  }, [query.data]);
 
   return query;
 };

@@ -39,6 +39,13 @@ class GETSettingsModel(Settings):
     )
     llm_api_key_set: bool
     search_api_key_set: bool = False
+    max_token: int | None = None
+    max_input_tokens: int | None = None
+    max_output_tokens: int | None = None
+    num_retries: int | None = None
+    retry_min_wait: int | None = None
+    retry_max_wait: int | None = None
+    retry_multiplier: float | None = None
 
     model_config = ConfigDict(use_enum_values=True)
 

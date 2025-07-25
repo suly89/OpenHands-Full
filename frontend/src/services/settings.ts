@@ -1,3 +1,4 @@
+
 import { Settings } from "#/types/settings";
 
 export const LATEST_SETTINGS_VERSION = 5;
@@ -26,6 +27,13 @@ export const DEFAULT_SETTINGS: Settings = {
     sse_servers: [],
     stdio_servers: [],
   },
+  MAX_TOKEN: null,
+  MAX_INPUT_TOKENS: null,
+  MAX_OUTPUT_TOKENS: null,
+  NUM_RETRIES: null,
+  RETRY_MIN_WAIT: null,
+  RETRY_MAX_WAIT: null,
+  RETRY_MULTIPLIER: null,
 };
 
 /**

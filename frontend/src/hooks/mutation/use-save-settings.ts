@@ -1,3 +1,6 @@
+
+
+
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import posthog from "posthog-js";
 import { DEFAULT_SETTINGS } from "#/services/settings";
@@ -27,6 +30,13 @@ const saveSettingsMutationFn = async (settings: Partial<PostSettings>) => {
       settings.ENABLE_PROACTIVE_CONVERSATION_STARTERS,
     search_api_key: settings.SEARCH_API_KEY?.trim() || "",
     max_budget_per_task: settings.MAX_BUDGET_PER_TASK,
+    max_token: settings.MAX_TOKEN,
+    max_input_tokens: settings.MAX_INPUT_TOKENS,
+    max_output_tokens: settings.MAX_OUTPUT_TOKENS,
+    num_retries: settings.NUM_RETRIES,
+    retry_min_wait: settings.RETRY_MIN_WAIT,
+    retry_max_wait: settings.RETRY_MAX_WAIT,
+    retry_multiplier: settings.RETRY_MULTIPLIER,
   };
 
   await OpenHands.saveSettings(apiSettings);
@@ -50,8 +60,7 @@ export const useSaveSettings = () => {
         const stdioServersCount =
           settings.MCP_CONFIG?.stdio_servers?.length || 0;
 
-        // Track MCP configuration usage
-        posthog.capture("mcp_config_updated", {
+        posthog.capture("mcp_config_changed", {
           has_mcp_config: hasMcpConfig,
           sse_servers_count: sseServersCount,
           stdio_servers_count: stdioServersCount,
@@ -59,12 +68,22 @@ export const useSaveSettings = () => {
       }
 
       await saveSettingsMutationFn(newSettings);
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["settings"] });
-    },
-    meta: {
-      disableToast: true,
+
+      // Invalidate the settings query
+      queryClient.invalidateQueries(["settings"]);
+
+      // Track settings changes
+      posthog.capture("settings_changed", {
+        llm_model: newSettings.LLM_MODEL,
+        language: newSettings.LANGUAGE,
+        confirmation_mode: newSettings.CONFIRMATION_MODE,
+        enable_sound_notifications: newSettings.ENABLE_SOUND_NOTIFICATIONS,
+        enable_proactive_conversation_starters:
+          newSettings.ENABLE_PROACTIVE_CONVERSATION_STARTERS,
+        user_consents_to_analytics: newSettings.USER_CONSENTS_TO_ANALYTICS,
+      });
+
+      return newSettings;
     },
   });
 };
