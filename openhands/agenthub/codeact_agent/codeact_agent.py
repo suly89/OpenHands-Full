@@ -28,7 +28,7 @@ from openhands.core.config import AgentConfig
 from openhands.core.logger import openhands_logger as logger
 from openhands.core.message import Message
 from openhands.events.action import AgentFinishAction, MessageAction
-from openhands.events.event import Event
+from openhands.events.event import Event, EventSource
 from openhands.llm.llm import LLM
 from openhands.llm.llm_utils import check_tools
 from openhands.memory.condenser import Condenser
@@ -44,6 +44,9 @@ from openhands.utils.prompt import PromptManager
 
 class CodeActAgent(Agent):
     VERSION = '2.2'
+    PLANNING_MODE = 'planning'
+    EXECUTION_MODE = 'execution'
+    COMPLETION_MODE = 'completion'
     """
     The Code Act Agent is a minimalist agent.
     The agent works by passing the model a list of action-observation pairs and prompting the model to take the next step.
@@ -92,6 +95,10 @@ class CodeActAgent(Agent):
 
         self.condenser = Condenser.from_config(self.config.condenser)
         logger.debug(f'Using condenser: {type(self.condenser)}')
+
+        # Initialize planning state
+        # Start in planning mode if there's no historical conversation
+        self.planning_state = self.PLANNING_MODE
 
     @property
     def prompt_manager(self) -> PromptManager:
@@ -171,36 +178,38 @@ class CodeActAgent(Agent):
         if latest_user_message and latest_user_message.content.strip() == '/exit':
             return AgentFinishAction()
 
-        # Condense the events from the state. If we get a view we'll pass those
-        # to the conversation manager for processing, but if we get a condensation
-        # event we'll just return that instead of an action. The controller will
-        # immediately ask the agent to step again with the new view.
-        condensed_history: list[Event] = []
-        match self.condenser.condensed_history(state):
-            case View(events=events):
-                condensed_history = events
+        # Initialize planning state based on chat history
+        self._initialize_planning_state_from_history(state)
 
-            case Condensation(action=condensation_action):
-                return condensation_action
+        # Get the last LLM response to check for mode transitions
+        last_response = self._get_last_llm_response(state)
+        print(f'DEBUG: Last LLM response: {last_response}')
+        if last_response:
+            print(f'DEBUG: Last LLM response content: {last_response.content}')
+            print(f'DEBUG: Last LLM response source: {last_response.source}')
+            new_mode = self._detect_mode_transition(last_response.content)
+            print(f'DEBUG: Detected mode transition: {new_mode}')
+            if new_mode != self.planning_state:
+                # Switch to the new mode
+                if new_mode == self.EXECUTION_MODE:
+                    print('DEBUG: Transitioning to EXECUTION_MODE')
+                    self.prompt_manager.set_system_prompt('system_prompt.j2')
+                    return self._handle_execution_phase(state)
+                elif new_mode == self.COMPLETION_MODE:
+                    print('DEBUG: Transitioning to COMPLETION_MODE')
+                    self.prompt_manager.set_system_prompt('completion_prompt.j2')
+                    return self._handle_completion_phase(state)
 
-        logger.debug(
-            f'Processing {len(condensed_history)} events from a total of {len(state.history)} events'
-        )
-
-        initial_user_message = self._get_initial_user_message(state.history)
-        messages = self._get_messages(condensed_history, initial_user_message)
-        params: dict = {
-            'messages': self.llm.format_messages_for_llm(messages),
-        }
-        params['tools'] = check_tools(self.tools, self.llm.config)
-        params['extra_body'] = {'metadata': state.to_llm_metadata(agent_name=self.name)}
-        response = self.llm.completion(**params)
-        logger.debug(f'Response from LLM: {response}')
-        actions = self.response_to_actions(response)
-        logger.debug(f'Actions after response_to_actions: {actions}')
-        for action in actions:
-            self.pending_actions.append(action)
-        return self.pending_actions.popleft()
+        # Continue with current mode
+        if self.planning_state == self.PLANNING_MODE:
+            self.prompt_manager.set_system_prompt('planning_prompt.j2')
+            return self._handle_planning_phase(state)
+        elif self.planning_state == self.COMPLETION_MODE:
+            self.prompt_manager.set_system_prompt('completion_prompt.j2')
+            return self._handle_completion_phase(state)
+        else:
+            self.prompt_manager.set_system_prompt('system_prompt.j2')
+            return self._handle_execution_phase(state)
 
     def _get_initial_user_message(self, history: list[Event]) -> MessageAction:
         """Finds the initial user message action from the full history."""
@@ -276,3 +285,240 @@ class CodeActAgent(Agent):
             response,
             mcp_tool_names=list(self.mcp_tools.keys()),
         )
+
+    def _should_enter_planning_mode(self, state: State) -> bool:
+        """Determine if we should enter planning mode."""
+        # Get the latest user message
+        latest_user_message = state.get_last_user_message()
+        if not latest_user_message:
+            return False
+
+        # Check if user is asking to start or continue development
+        start_keywords = [
+            'start',
+            'begin',
+            'create',
+            'build',
+            'develop',
+            'implement',
+            'write code',
+            'make',
+            'generate',
+            'set up',
+            'initiate',
+        ]
+
+        continue_keywords = [
+            'continue',
+            'resume',
+            'keep going',
+            'proceed',
+            'go ahead',
+            "let's do it",
+            'start now',
+            'begin now',
+        ]
+
+        content = latest_user_message.content.lower()
+        return any(keyword in content for keyword in start_keywords + continue_keywords)
+
+    def _has_approved_plan(self, state: State) -> bool:
+        """Check if the user has approved the plan."""
+        # Get the latest user message
+        latest_user_message = state.get_last_user_message()
+        if not latest_user_message:
+            return False
+
+        # Check for approval indicators
+        approval_indicators = [
+            'yes',
+            'y',
+            'approve',
+            'approved',
+            'looks good',
+            'proceed',
+            'go ahead',
+            'start',
+            'begin',
+            "let's do it",
+            'ok',
+            'okay',
+        ]
+
+        content = latest_user_message.content.lower()
+        return any(indicator in content for indicator in approval_indicators)
+
+    def _get_planning_response(self, state: State) -> 'Action':
+        """Get a response from the LLM in planning mode."""
+        # Continue with pending actions if any
+        if self.pending_actions:
+            return self.pending_actions.popleft()
+
+        # if we're done, go back
+        latest_user_message = state.get_last_user_message()
+        if latest_user_message and latest_user_message.content.strip() == '/exit':
+            return AgentFinishAction()
+
+        # Condense the events from the state
+        condensed_history: list[Event] = []
+        match self.condenser.condensed_history(state):
+            case View(events=events):
+                condensed_history = events
+            case Condensation(action=condensation_action):
+                return condensation_action
+
+        logger.debug(
+            f'Processing {len(condensed_history)} events from a total of {len(state.history)} events'
+        )
+
+        initial_user_message = self._get_initial_user_message(state.history)
+        messages = self._get_messages(condensed_history, initial_user_message)
+        params: dict = {
+            'messages': self.llm.format_messages_for_llm(messages),
+        }
+        params['tools'] = check_tools(self.tools, self.llm.config)
+        params['extra_body'] = {'metadata': state.to_llm_metadata(agent_name=self.name)}
+        response = self.llm.completion(**params)
+        logger.debug(f'Response from LLM: {response}')
+        actions = self.response_to_actions(response)
+        logger.debug(f'Actions after response_to_actions: {actions}')
+        for action in actions:
+            self.pending_actions.append(action)
+        return self.pending_actions.popleft()
+
+    def _get_execution_response(self, state: State) -> 'Action':
+        """Get a response from the LLM in execution mode."""
+        # Continue with pending actions if any
+        if self.pending_actions:
+            return self.pending_actions.popleft()
+
+        # if we're done, go back
+        latest_user_message = state.get_last_user_message()
+        if latest_user_message and latest_user_message.content.strip() == '/exit':
+            return AgentFinishAction()
+
+        # Condense the events from the state
+        condensed_history: list[Event] = []
+        match self.condenser.condensed_history(state):
+            case View(events=events):
+                condensed_history = events
+            case Condensation(action=condensation_action):
+                return condensation_action
+
+        logger.debug(
+            f'Processing {len(condensed_history)} events from a total of {len(state.history)} events'
+        )
+
+        initial_user_message = self._get_initial_user_message(state.history)
+        messages = self._get_messages(condensed_history, initial_user_message)
+        params: dict = {
+            'messages': self.llm.format_messages_for_llm(messages),
+        }
+        params['tools'] = check_tools(self.tools, self.llm.config)
+        params['extra_body'] = {'metadata': state.to_llm_metadata(agent_name=self.name)}
+        response = self.llm.completion(**params)
+        logger.debug(f'Response from LLM: {response}')
+        actions = self.response_to_actions(response)
+        logger.debug(f'Actions after response_to_actions: {actions}')
+        for action in actions:
+            self.pending_actions.append(action)
+        return self.pending_actions.popleft()
+
+    def _get_last_llm_response(self, state: State) -> MessageAction | None:
+        """Get the last LLM response from the state history."""
+        # Look for the most recent MessageAction from the agent
+        for event in reversed(state.history):
+            if isinstance(event, MessageAction) and event.source == EventSource.AGENT:
+                return event
+        return None
+
+    def _detect_mode_transition(self, response_content: str) -> str:
+        """Detect mode transition keywords in LLM responses."""
+        # Check for planning mode transition
+        if 'moving to development' in response_content.lower():
+            return self.EXECUTION_MODE
+        # Check for completion mode transition
+        elif 'development complete' in response_content.lower():
+            return self.COMPLETION_MODE
+        # Default: stay in current mode
+        return self.planning_state
+
+    def _handle_planning_phase(self, state: State) -> 'Action':
+        """Handle the planning phase before execution."""
+        self.planning_state = self.PLANNING_MODE
+
+        # Continue with normal processing but with planning prompt
+        return self._get_planning_response(state)
+
+    def _handle_execution_phase(self, state: State) -> 'Action':
+        """Handle the execution phase."""
+        self.planning_state = self.EXECUTION_MODE
+
+        # Continue with normal processing
+        return self._get_execution_response(state)
+
+    def _handle_completion_phase(self, state: State) -> 'Action':
+        """Handle the completion phase."""
+        self.planning_state = self.COMPLETION_MODE
+
+        # Continue with normal processing but with completion prompt
+        return self._get_completion_response(state)
+
+    def _get_completion_response(self, state: State) -> 'Action':
+        """Get a response from the LLM in completion mode."""
+        # Continue with pending actions if any
+        if self.pending_actions:
+            return self.pending_actions.popleft()
+
+        # if we're done, go back
+        latest_user_message = state.get_last_user_message()
+        if latest_user_message and latest_user_message.content.strip() == '/exit':
+            return AgentFinishAction()
+
+        # Condense the events from the state
+        condensed_history: list[Event] = []
+        match self.condenser.condensed_history(state):
+            case View(events=events):
+                condensed_history = events
+            case Condensation(action=condensation_action):
+                return condensation_action
+
+        logger.debug(
+            f'Processing {len(condensed_history)} events from a total of {len(state.history)} events'
+        )
+
+        initial_user_message = self._get_initial_user_message(state.history)
+        messages = self._get_messages(condensed_history, initial_user_message)
+        params: dict = {
+            'messages': self.llm.format_messages_for_llm(messages),
+        }
+        params['tools'] = check_tools(self.tools, self.llm.config)
+        params['extra_body'] = {'metadata': state.to_llm_metadata(agent_name=self.name)}
+        response = self.llm.completion(**params)
+        logger.debug(f'Response from LLM: {response}')
+        actions = self.response_to_actions(response)
+        logger.debug(f'Actions after response_to_actions: {actions}')
+        for action in actions:
+            self.pending_actions.append(action)
+        return self.pending_actions.popleft()
+
+    def _initialize_planning_state_from_history(self, state: State) -> None:
+        """Initialize planning state based on chat history."""
+        # If there's no history, start in planning mode
+        if not state.history:
+            self.planning_state = self.PLANNING_MODE
+            return
+
+        # Look for the last mode transition keyword in chat history
+        for event in reversed(state.history):
+            if isinstance(event, MessageAction):
+                content = event.content.lower()
+                if 'moving to development' in content:
+                    self.planning_state = self.EXECUTION_MODE
+                    return
+                elif 'development complete' in content:
+                    self.planning_state = self.COMPLETION_MODE
+                    return
+
+        # Default: stay in planning mode if no transitions found
+        self.planning_state = self.PLANNING_MODE

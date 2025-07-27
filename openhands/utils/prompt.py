@@ -92,6 +92,10 @@ class PromptManager:
     def get_system_message(self) -> str:
         return self.system_template.render().strip()
 
+    def set_system_prompt(self, template_name: str) -> None:
+        """Set a new system prompt template by name."""
+        self.system_template = self._load_template(template_name)
+
     def get_example_user_message(self) -> str:
         """This is an initial user message that can be provided to the agent
         before *actual* user instructions are provided.

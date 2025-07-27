@@ -315,6 +315,9 @@ class ConversationMemory:
             ]
         elif isinstance(action, SystemMessageAction):
             # Convert SystemMessageAction to a system message
+            print(
+                f'DEBUG: Processing SystemMessageAction with content type: {type(action.content)}, value: {action.content}'
+            )
             return [
                 Message(
                     role='system',
@@ -791,7 +794,19 @@ class ConversationMemory:
                 '[ConversationMemory] No SystemMessageAction found in events. '
                 'Adding one for backward compatibility. '
             )
+            print(f'DEBUG: prompt_manager type: {type(self.prompt_manager)}')
+            print(
+                f'DEBUG: get_system_message method: {self.prompt_manager.get_system_message}'
+            )
+
+            print('DEBUG: About to call get_system_message')
+            # Try to call the mock function directly
             system_prompt = self.prompt_manager.get_system_message()
+            print(f'DEBUG: Called get_system_message, result: {system_prompt}')
+
+            print(
+                f'DEBUG: system_prompt type: {type(system_prompt)}, value: {system_prompt}'
+            )
             if system_prompt:
                 system_message = SystemMessageAction(content=system_prompt)
                 # Insert the system message directly at the beginning of the events list

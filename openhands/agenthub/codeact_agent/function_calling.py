@@ -38,7 +38,7 @@ from openhands.events.action import (
 )
 from openhands.events.action.agent import CondensationRequestAction
 from openhands.events.action.mcp import MCPAction
-from openhands.events.event import FileEditSource, FileReadSource
+from openhands.events.event import EventSource, FileEditSource, FileReadSource
 from openhands.events.tool import ToolCallMetadata
 
 
@@ -246,11 +246,9 @@ def response_to_actions(
             )
             actions.append(action)
     else:
-        actions.append(
-            MessageAction(
-                content=str(assistant_msg.content) if assistant_msg.content else '',
-                wait_for_response=True,
-            )
+        message_action = MessageAction(
+            content=str(assistant_msg.content) if assistant_msg.content else '',
+            wait_for_response=True,
         )
 
     # Add response id to actions

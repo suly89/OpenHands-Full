@@ -14,6 +14,7 @@ class MessageAction(Action):
     wait_for_response: bool = False
     action: str = ActionType.MESSAGE
     security_risk: ActionSecurityRisk | None = None
+    _source: str | None = None  # Add type annotation for _source attribute
 
     @property
     def message(self) -> str:
@@ -52,6 +53,7 @@ class SystemMessageAction(Action):
     openhands_version: str | None = openhands.__version__
     agent_class: str | None = None
     action: ActionType = ActionType.SYSTEM
+    _source: str | None = None  # Add type annotation for _source attribute
 
     @property
     def message(self) -> str:
