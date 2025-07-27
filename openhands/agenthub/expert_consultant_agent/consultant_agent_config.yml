@@ -1,0 +1,7 @@
+
+agent_config:
+  max_questions: 50
+  documentation:
+    template_style: "corporate"
+    include_diagrams: true
+    split_threshold_lines: 1000
