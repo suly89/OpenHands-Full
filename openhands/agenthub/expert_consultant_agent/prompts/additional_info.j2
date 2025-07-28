@@ -1,0 +1,158 @@
+{% if repository_info %}
+<REPOSITORY_INFO>
+At the user's request, repository {{ repository_info.repo_name }} has been cloned to {{ repository_info.repo_directory }} in the current working directory.
+{% if repository_info.existing_microagents_dir %}
+Existing microagents directory found at {{ repository_info.existing_microagents_dir }} with {{ repository_info.existing_docs_count | default(0) }} documentation files.
+{% endif %}
+</REPOSITORY_INFO>
+{% endif %}
+
+{% if repository_instructions -%}
+<REPOSITORY_INSTRUCTIONS>
+{{ repository_instructions }}
+</REPOSITORY_INSTRUCTIONS>
+{% endif %}
+
+{% if consultant_config %}
+<CONSULTANT_CONFIGURATION>
+Agent configuration loaded from: {{ consultant_config.config_file_path | default('consultant_agent_config.yml') }}
+
+Documentation Settings:
+- Template Style: {{ consultant_config.template_style | default('corporate') }}
+- Include Diagrams: {{ consultant_config.include_diagrams | default(true) }}
+- Split Threshold (lines): {{ consultant_config.split_threshold_lines | default(1000) }}
+- Max Questions: {{ consultant_config.max_questions | default(50) }}
+{% if consultant_config.custom_templates_dir %}
+- Custom Templates Directory: {{ consultant_config.custom_templates_dir }}
+{% endif %}
+
+Output Configuration:
+- Documentation Directory: {{ consultant_config.output_dir | default('.openhands/microagents/') }}
+- Generate Index File: {{ consultant_config.generate_index | default(true) }}
+- Cross-Reference Links: {{ consultant_config.enable_cross_links | default(true) }}
+{% if consultant_config.preserve_existing %}
+- Preserve Existing Documents: {{ consultant_config.preserve_existing }}
+{% endif %}
+</CONSULTANT_CONFIGURATION>
+{% endif %}
+
+{% if runtime_info -%}
+<RUNTIME_INFORMATION>
+{% if runtime_info.working_dir %}
+The current working directory is {{ runtime_info.working_dir }}
+{% endif %}
+
+{% if runtime_info.microagents_status %}
+Microagents Directory Status:
+- Directory exists: {{ runtime_info.microagents_status.exists }}
+{% if runtime_info.microagents_status.repo_md_exists %}
+- repo.md found: {{ runtime_info.microagents_status.repo_md_path }}
+{% endif %}
+{% if runtime_info.microagents_status.existing_consultant_docs %}
+- Existing consultant documents: {{ runtime_info.microagents_status.existing_consultant_docs | length }}
+  {% for doc in runtime_info.microagents_status.existing_consultant_docs -%}
+  * {{ doc }}
+  {% endfor %}
+{% endif %}
+{% endif %}
+
+{% if runtime_info.available_hosts %}
+The user has access to the following hosts for accessing a web application,
+each of which has a corresponding port:
+{% for host, port in runtime_info.available_hosts.items() -%}
+* {{ host }} (port {{ port }})
+{% endfor %}
+When starting a web server, use the corresponding ports. You should also
+set any options to allow iframes and CORS requests, and allow the server to
+be accessed from any host (e.g. 0.0.0.0).
+{% endif %}
+
+{% if runtime_info.tool_availability %}
+Available Tools Status:
+- Mermaid Diagram Generation: {{ runtime_info.tool_availability.mermaid_available | default(true) }}
+- Documentation Validator: {{ runtime_info.tool_availability.validator_available | default(true) }}
+- File System Access: {{ runtime_info.tool_availability.file_system_available | default(true) }}
+{% if runtime_info.tool_availability.custom_tools %}
+- Custom Tools: {{ runtime_info.tool_availability.custom_tools | join(', ') }}
+{% endif %}
+{% endif %}
+
+{% if runtime_info.codeact_integration %}
+CodeActAgent Integration:
+- CodeActAgent Compatibility Mode: {{ runtime_info.codeact_integration.enabled | default(false) }}
+{% if runtime_info.codeact_integration.enabled %}
+- Extended Prompt Available: {{ runtime_info.codeact_integration.extended_prompt | default(true) }}
+- CodeAct README Generation: {{ runtime_info.codeact_integration.generate_readme | default(true) }}
+{% endif %}
+{% endif %}
+
+{% if runtime_info.session_context %}
+Current Session Context:
+- Consultation Phase: {{ runtime_info.session_context.current_phase | default('initialization') }}
+- Questions Asked: {{ runtime_info.session_context.questions_count | default(0) }}
+- Documents Generated: {{ runtime_info.session_context.docs_generated | default(0) }}
+{% if runtime_info.session_context.last_user_input %}
+- Last User Input Topic: {{ runtime_info.session_context.last_user_input }}
+{% endif %}
+{% endif %}
+
+{% if runtime_info.additional_agent_instructions %}
+{{ runtime_info.additional_agent_instructions }}
+{% endif %}
+
+{% if runtime_info.custom_secrets_descriptions %}
+<CUSTOM_SECRETS>
+You have access to the following environment variables:
+{% for secret_name, secret_description in runtime_info.custom_secrets_descriptions.items() %}
+* $**{{ secret_name }}**: {{ secret_description }}
+{% endfor %}
+</CUSTOM_SECRETS>
+{% endif %}
+
+{% if runtime_info.date %}
+Today's date is {{ runtime_info.date }} (UTC).
+{% endif %}
+</RUNTIME_INFORMATION>
+
+{% if conversation_instructions and conversation_instructions.content -%}
+<CONVERSATION_INSTRUCTIONS>
+{{ conversation_instructions.content }}
+</CONVERSATION_INSTRUCTIONS>
+{% endif %}
+
+<AGENT_SPECIFIC_CONTEXT>
+ExpertConsultantAgent Operating Context:
+
+Core Responsibilities:
+1. Repository analysis (structure, dependencies, tech stack)
+2. Interactive requirement gathering through structured questions
+3. Architecture and solution recommendations
+4. Modular documentation generation in .openhands/microagents/
+5. Documentation validation and cross-linking
+
+Key Constraints:
+- NEVER modify or overwrite .openhands/microagents/repo.md
+- Create consultant-index.md as the central entry point
+- Split documents exceeding threshold limits
+- Use only prompt-driven logic (no hardcoded flows)
+- Generate documents only as needed based on project context
+
+Expected Output Files (create only when relevant):
+- consultant-index.md (always required)
+- functional-requirements.md
+- technical-architecture.md
+- feature-plan.md
+- tasks/*.md (for detailed implementation plans)
+- integration-specs.md
+- security.md, performance.md (if applicable)
+- decision-log.md
+- codeact-readme.md (if CodeActAgent integration enabled)
+
+Documentation Standards:
+- Include metadata section (Status, Last Updated, Related docs)
+- Use relative Markdown links for cross-references
+- Include Summary, Details, and TODO/Unknowns sections
+- Generate Mermaid diagrams for complex architectures
+- Validate completeness before finalizing
+</AGENT_SPECIFIC_CONTEXT>
+{% endif %}

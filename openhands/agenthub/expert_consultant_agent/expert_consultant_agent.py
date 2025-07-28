@@ -31,9 +31,11 @@ from openhands.agenthub.codeact_agent.tools.str_replace_editor import (
 from openhands.agenthub.codeact_agent.tools.think import ThinkTool
 from openhands.agenthub.expert_consultant_agent.tools.generate_mermaid import (
     GenerateMermaidDiagramAction,
+    GenerateMermaidDiagramTool,
 )
 from openhands.agenthub.expert_consultant_agent.tools.validate_docs import (
     DocumentationValidatorAction,
+    DocumentationValidatorTool,
 )
 from openhands.controller.agent import Agent
 from openhands.controller.state.state import State
@@ -47,7 +49,11 @@ from openhands.llm.llm_utils import check_tools
 from openhands.memory.condenser import Condenser
 from openhands.memory.condenser.condenser import Condensation, View
 from openhands.memory.conversation_memory import ConversationMemory
-from openhands.runtime.plugins import PluginRequirement
+from openhands.runtime.plugins import (
+    AgentSkillsRequirement,
+    JupyterRequirement,
+    PluginRequirement,
+)
 from openhands.utils.prompt import PromptManager
 
 
@@ -67,8 +73,8 @@ class ExpertConsultantAgent(Agent):
         # NOTE: AgentSkillsRequirement need to go before JupyterRequirement, since
         # AgentSkillsRequirement provides a lot of Python functions,
         # and it needs to be initialized before Jupyter for Jupyter to use those functions.
-        PluginRequirement(name='AgentSkillsRequirement'),
-        PluginRequirement(name='JupyterRequirement'),
+        AgentSkillsRequirement(),
+        JupyterRequirement(),
     ]
 
     def __init__(
@@ -143,8 +149,8 @@ class ExpertConsultantAgent(Agent):
             )
 
         # Add custom tools
-        tools.append(GenerateMermaidDiagramAction)
-        tools.append(DocumentationValidatorAction)
+        tools.append(GenerateMermaidDiagramTool)
+        tools.append(DocumentationValidatorTool)
 
         return tools
 

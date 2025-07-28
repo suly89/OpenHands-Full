@@ -16,9 +16,11 @@ from openhands.agenthub.expert_consultant_agent.tools.generate_mermaid import (
 from openhands.agenthub.expert_consultant_agent.tools.validate_docs import (
     DocumentationValidatorAction,
 )
+from openhands.controller.agent import Agent
 
 __all__ = [
     'ExpertConsultantAgent',
     'GenerateMermaidDiagramAction',
     'DocumentationValidatorAction',
 ]
+Agent.register('ExpertConsultantAgent', ExpertConsultantAgent)

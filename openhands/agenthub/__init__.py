@@ -11,6 +11,7 @@ from openhands.agenthub import (  # noqa: E402
     loc_agent,
     readonly_agent,
     visualbrowsing_agent,
+    expert_consultant_agent,
 )
 from openhands.controller.agent import Agent  # noqa: E402
 
@@ -23,4 +24,5 @@ __all__ = [
     'visualbrowsing_agent',
     'readonly_agent',
     'loc_agent',
+    'expert_consultant_agent'
 ]
